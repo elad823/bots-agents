@@ -316,29 +316,71 @@ graph TD
     DeployProd --> ProdRun
 ```
 
-#### 6.1. GitHub Actions Workflows
+#### 6.1. Branch Naming Protocol & Promotion Architecture
+
+To maintain clear traceability and automated promotion, all work follows **Trunk-Based Development with an Automated Staging Gate and Manual-Only Production**:
+
+##### Branch Naming Convention:
+All branches MUST be named specifically according to the task being addressed:
+- `feature/<task-description>`: New capabilities or functional tasks (e.g., `feature/dynamic-agent-forge`, `feature/sqlite-vector-memory`).
+- `fix/<bug-description>`: Targeted bug repairs (e.g., `fix/rate-limiter-timeout`, `fix/streamlit-loop-reentry`).
+- `chore/<task-description>`: Maintenance, tool upgrades, CI/CD adjustments (e.g., `chore/ci-pipeline-gating`).
+- `docs/<task-description>`: Documentation, guides, and specifications (e.g., `docs/secret-storage-matrix`).
+*Generic names like `test`, `dev`, `my-branch`, `feature-1`, or `patch` are strictly forbidden.*
+
+##### Automated Pull Request Protocol:
+When committing changes to a task-specific side branch, push to remote and automatically open a Pull Request against `main` using `gh pr create`.
+
+
+```mermaid
+graph TD
+    subgraph 1_FeatureBranch ["1. Feature Branch (Task-Specific Name)"]
+        Dev["feature/<task-name>"]
+        PR["Pull Request to main"]
+        CI["CI: Secret Scan + 17 Unit/E2E Tests (Mock) + Docker Build Gate"]
+        Dev --> PR --> CI
+    end
+
+    subgraph 2_StagingGate ["2. Staging Deployment & Live Verification"]
+        MergeMain["Merge PR into main"]
+        DeployStage["Auto-Deploy to Cloud Run Staging"]
+        LiveE2E["Run Live Smoke & Health Checks on Staging URL"]
+        CI -->|Pass & Merge| MergeMain --> DeployStage --> LiveE2E
+    end
+
+    subgraph 3_ProductionRelease ["3. Production Rollout (Strictly Manual)"]
+        ManualGate{"Manual Dispatch + 'DEPLOY_PRODUCTION' Confirmation?"}
+        DeployProd["Zero-Downtime Blue/Green Rollout to Production"]
+        LiveE2E -.->|Verified on Staging| ManualGate
+        ManualGate -->|Explicit Human Trigger & Approval| DeployProd
+    end
+```
+
+#### 6.2. GitHub Actions Workflows
 
 1. **Continuous Integration (`.github/workflows/ci.yml`)**:
-   - **Triggers**: Every `push` and `pull_request` targeting `main` or `feature/*`.
-   - **Pre-Flight Secret Scan**: Executes `python3 scripts/validate_secrets.py` to intercept leaked API keys, tokens, or credential files before any tests run.
-   - **Static Analysis**: Runs `flake8` to enforce PEP 8 standards.
-   - **Full Test Suite**: Executes `run_tests.py` verifying all 17 unit, integration, and E2E pipeline tests.
-   - **Artifact Upload**: Generates and uploads code coverage reports.
+   - **Triggers**: Every `push` and `pull_request` targeting `main` or `feature/**`, `fix/**`, `chore/**`.
+   - **Pre-Flight Secret Scan**: Executes `python3 scripts/validate_secrets.py` to intercept leaked API keys or credentials.
+   - **Static Analysis**: Runs `flake8` / `ruff` to enforce code standards.
+   - **Full Test Suite**: Executes `run_tests.py` verifying all 17 unit, integration, and E2E pipeline tests in mock mode.
+   - **Docker Build Validation**: Validates that both backend and frontend Dockerfiles build cleanly without error.
 
 2. **Continuous Deployment: Staging (`.github/workflows/deploy-staging.yml`)**:
-   - **Triggers**: Automatic push to `feature/*` or manual `workflow_dispatch`.
+   - **Triggers**: **Automatically triggers whenever code is merged into `main`** (or manual `workflow_dispatch`).
    - **Environment**: GitHub Environment `staging`.
-   - **Build & Push**: Builds `backend/Dockerfile` with Google Cloud Build and tags as `gcr.io/$GCP_PROJECT_ID/mas-backend-staging:${{ github.sha }}`.
+   - **Build & Push**: Builds and tags container image with the commit SHA.
    - **Cloud Run Deployment**: Deploys to `mas-backend-staging` with staging environment variables and GCS volume mount.
-   - **Automated Health Probe**: Validates `/api/system/status` on the deployed staging instance.
+   - **Automated Live Smoke Probe**: Validates `/api/system/status` on the live deployed staging instance.
 
 3. **Continuous Deployment: Production (`.github/workflows/deploy-prod.yml`)**:
-   - **Triggers**: Release tags (`v*.*.*`) or merged PRs to `main`.
-   - **Environment**: GitHub Environment `production` (with manual approval protection rules).
-   - **Build & Push**: Tags container image with release version and `latest`.
-   - **Zero-Downtime Rollout**: Cloud Run performs blue/green revision switching once health checks pass.
+   - **Triggers**: **STRICTLY MANUAL ONLY (`workflow_dispatch`)**.
+   - **NEVER Auto-Deploys**: Production will **NEVER** deploy automatically upon test pass, push, merge, or tag.
+   - **Confirmation Gate**: Requires the operator to enter `DEPLOY_PRODUCTION` as an explicit input string to prevent accidental triggers.
+   - **Approval Protection**: Tied to GitHub Environment `production` with Required Reviewer protection rules.
+   - **Zero-Downtime Rollout**: Blue/green traffic shift once canary health checks pass.
 
-#### 6.2. Automated Shell Deployment Scripts
+
+#### 6.3. Automated Shell Deployment Scripts
 
 For manual or local CLI triggers, automated shell scripts mirror the CI/CD pipeline with pre-flight safety checks:
 
@@ -353,7 +395,7 @@ For manual or local CLI triggers, automated shell scripts mirror the CI/CD pipel
   - Enforces confirmation prompts before deploying to production.
   - Runs all safety audits and deploys to `mas-backend-prod`.
 
-#### 6.3. Secret Storage & Isolation Strategy Per Environment (`test` / `stage` / `prod`)
+#### 6.4. Secret Storage & Isolation Strategy Per Environment (`test` / `stage` / `prod`)
 
 To prevent credential leaks and ensure zero disruption between testing and production, secrets and sensitive configurations are strictly separated across three environments:
 

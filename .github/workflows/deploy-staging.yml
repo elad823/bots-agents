@@ -3,7 +3,7 @@ name: Deploy Staging Environment
 on:
   push:
     branches:
-      - staging
+      - main
   workflow_dispatch:
 
 concurrency:

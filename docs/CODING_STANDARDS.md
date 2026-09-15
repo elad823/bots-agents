@@ -169,3 +169,25 @@ class LLMProviderProtocol(Protocol):
    - Follow PEP 8 guidelines.
    - Target line length: 100 characters.
    - Self-documenting code: docstrings for public classes and methods outlining parameters, return values, and exceptions raised.
+
+---
+
+### 8. Git Workflow, Branch Naming & Deployment Standards
+
+1. **Task-Specific Branch Naming:**
+   - Every change must be implemented on a dedicated side branch named specifically according to the task:
+     - `feature/<task-name>` (e.g. `feature/staging-cd-prod-manual-gate`)
+     - `fix/<bug-name>` (e.g. `fix/rate-limiter-timeout`)
+     - `chore/<task-name>` (e.g. `chore/dependency-updates`)
+     - `docs/<task-name>` (e.g. `docs/secret-storage-matrix`)
+   - Never use generic or uninformative branch names (e.g. `dev`, `test`, `my-branch`, `patch`).
+   - Never push directly to `main`.
+
+2. **Automated Pull Request Protocol:**
+   - When committing changes to a side branch, push to remote and automatically open a Pull Request against `main` using `gh pr create`.
+
+3. **Promotion Workflow & Production Guardrail (Option 1):**
+   - Merging a feature PR into `main` automatically triggers deployment to the **Staging** environment (`mas-backend-staging`) and runs automated live smoke tests.
+   - **Production deployment is NEVER automatic**, even if all CI tests and staging checks pass.
+   - Production rollouts strictly require manual execution (`workflow_dispatch` on `deploy-prod.yml`), operator confirmation input (`DEPLOY_PRODUCTION`), and approval via GitHub Environment `production` protection rules.
+

@@ -27,6 +27,10 @@ Welcome to the **Autonomous Multi-Agent System (MAS)** project workspace. This f
 4. **Non-Blocking Asynchronous Code**: Use `async`/`await` for all I/O, database access, and HTTP requests (`httpx.AsyncClient`).
 5. **Persistent State**: Never write SQLite data to ephemeral container directories; always store in `/app/data` backed by persistent volume.
 6. **Zero-Secret Leakage**: Never commit `.env` or credential files. Always verify with `python3 scripts/validate_secrets.py` before committing.
+7. **Task-Specific Branch Naming**: Never push directly to `main`. Side branches must be named strictly according to the task (`feature/<task-name>`, `fix/<task-name>`, `chore/<task-name>`, `docs/<task-name>`). Generic names (`test`, `dev`, `my-branch`) are strictly prohibited.
+8. **Auto-Open Pull Request**: When committing to a side branch, always push to remote and automatically open a Pull Request against `main` via `gh pr create`.
+9. **Option 1 Promotion & Manual-Only Production**: Merging to `main` auto-deploys to Staging. Production deployment is **NEVER automatic**, even if all tests pass. Production rollouts strictly require manual `workflow_dispatch` with `DEPLOY_PRODUCTION` confirmation.
+
 
 ---
 
