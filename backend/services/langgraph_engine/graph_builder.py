@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 from backend.repositories.agent_repository import agent_repository
+from backend.repositories.message_repository import message_repository
 from backend.services.langgraph_engine.dynamic_worker import execute_worker_node
 from backend.services.langgraph_engine.state import AgentState
 from backend.services.langgraph_engine.supervisor import execute_supervisor_node
@@ -30,13 +31,27 @@ class MultiAgentGraphRunner:
         target_agent: str = "supervisor",
     ) -> AgentState:
         """Execute multi-agent workflow starting from target agent or supervisor."""
-        initial_state: AgentState = {
-            "messages": [{
+        # Load recent session history to maintain multi-turn context
+        history = await message_repository.get_history(session_id, limit=8)
+        formatted_messages: list[dict[str, Any]] = [
+            {
+                "role": m.get("role", "user"),
+                "sender_id": m.get("sender_id", "user"),
+                "recipient_id": m.get("recipient_id", "all"),
+                "content": m.get("content", ""),
+            }
+            for m in history
+        ]
+        if not formatted_messages or formatted_messages[-1].get("content") != prompt:
+            formatted_messages.append({
                 "role": "user",
                 "sender_id": "user",
                 "recipient_id": target_agent,
                 "content": prompt,
-            }],
+            })
+
+        initial_state: AgentState = {
+            "messages": formatted_messages,
             "next": target_agent,
             "session_id": session_id,
             "active_agent": target_agent,

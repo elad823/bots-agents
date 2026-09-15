@@ -1,8 +1,10 @@
-from __future__ import annotations
-
 import asyncio
 import sys
 import os
+
+# Enforce hermetic test mode with mock API key to protect rate limit quota and ensure isolation
+os.environ["GEMINI_API_KEY"] = "mock_dev_key"
+os.environ["ENVIRONMENT"] = "testing"
 
 # Ensure current directory is on PYTHONPATH
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))

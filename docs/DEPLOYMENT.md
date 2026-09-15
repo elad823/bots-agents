@@ -380,10 +380,13 @@ graph TD
    - **Zero-Downtime Rollout**: Blue/green traffic shift once canary health checks pass.
 
 
-#### 6.3. Automated Shell Deployment Scripts
+#### 6.3. Automated Deployment & Environment Scripts
 
 For manual or local CLI triggers, automated shell scripts mirror the CI/CD pipeline with pre-flight safety checks:
 
+- **`scripts/setup_environments.py`**:
+  - Interactive multi-environment wizard configuring Local (`.env`), Staging (GitHub Secrets), and Production.
+  - Enforces account isolation and re-authentication checks to prevent quota contamination.
 - **`scripts/validate_secrets.py`**:
   - Scans tracked and workspace files for Google AI Studio keys (`AIzaSy...`), GCP Service Account keys, private keys (`BEGIN PRIVATE KEY`), and dangerous uncommitted `.env` files.
   - Returns exit code `1` upon any detection to immediately halt build pipelines.
@@ -392,7 +395,8 @@ For manual or local CLI triggers, automated shell scripts mirror the CI/CD pipel
   - Executes `scripts/validate_secrets.py` and `run_tests.py` prior to build.
   - Submits container build and deploys to Cloud Run staging service.
 - **`scripts/deploy_prod.sh`**:
-  - Enforces confirmation prompts before deploying to production.
+  - Identity & Re-Authentication Gate: Verifies active GCP account and prompts for production re-login.
+  - Manual confirmation gate requiring operator to type `DEPLOY_PRODUCTION`.
   - Runs all safety audits and deploys to `mas-backend-prod`.
 
 #### 6.4. Secret Storage & Isolation Strategy Per Environment (`test` / `stage` / `prod`)

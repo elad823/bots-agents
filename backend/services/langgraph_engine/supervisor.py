@@ -62,21 +62,35 @@ async def execute_supervisor_node(state: AgentState) -> AgentState:
             "",
         )
 
+        # 3. Build conversation context for multi-turn awareness
+        convo_snippets = []
+        for m in state["messages"][-6:]:
+            sender = m.get("sender_id") or m.get("role", "user")
+            convo_snippets.append(f"{sender.capitalize()}: {m.get('content', '')}")
+        conversation_context = "\n".join(convo_snippets)
+
         supervisor_system_prompt = (
             "You are the Master Supervisor of an Autonomous Multi-Agent System.\n"
-            f"Active Registered Specialist Agents:\n{workers_summary}\n\n"
-            "Analyze the user's request. You must decide whether to:\n"
-            "1. DIRECT_ANSWER: You can answer directly if conversational or general.\n"
+            f"Active Registered Specialist Agents:\n{workers_summary if workers_summary else 'None (Only Master Supervisor is currently active)'}\n\n"
+            "Analyze the conversation and user request. You must decide whether to:\n"
+            "1. DIRECT_ANSWER: You can answer directly if conversational, administrative, clarification, or general synthesis.\n"
             "2. DELEGATE: Route to an existing registered specialist agent.\n"
-            "3. SPAWN_AGENT: A specialized domain capability is needed but missing from registered agents. Create a new specialist!\n\n"
+            "3. SPAWN_AGENT: A specialized domain capability is needed but missing from registered agents. Create a new specialist!\n"
+            "4. REMOVE_AGENTS: The user explicitly requests or confirms removing, deleting, or clearing specialist agents.\n\n"
             "Respond in strictly valid JSON format with keys:\n"
-            '{"action": "DIRECT_ANSWER"|"DELEGATE"|"SPAWN_AGENT", "target_agent": "<slug>", '
+            '{"action": "DIRECT_ANSWER"|"DELEGATE"|"SPAWN_AGENT"|"REMOVE_AGENTS", '
+            '"target_agent": "<slug>", "target_agents": ["all" or list of slugs], '
             '"spawn_details": {"name": "...", "slug": "...", "role": "...", "system_prompt": "..."}, '
             '"scratchpad": "reasoning...", "direct_answer": "..."}'
         )
 
+        supervisor_prompt = (
+            f"Conversation History:\n{conversation_context}\n\n"
+            f"Latest User Request: {last_user_msg}"
+        )
+
         decision_raw = await llm_gateway.generate_response(
-            prompt=f"User Request: {last_user_msg}",
+            prompt=supervisor_prompt,
             system_prompt=supervisor_system_prompt,
             caller_id="supervisor",
         )
@@ -85,7 +99,32 @@ async def execute_supervisor_node(state: AgentState) -> AgentState:
         decision = _parse_supervisor_json(decision_raw)
         action = decision.get("action", "DIRECT_ANSWER")
 
-        if action == "SPAWN_AGENT":
+        if action == "REMOVE_AGENTS":
+            all_current = await agent_repository.get_all()
+            target_slugs = decision.get("target_agents") or [decision.get("target_agent", "all")]
+            deleted = []
+            for ag in all_current:
+                if ag.get("is_system_agent") == 1:
+                    continue
+                if "all" in target_slugs or ag["slug"] in target_slugs:
+                    await agent_repository.delete(ag["id"])
+                    deleted.append(ag["name"])
+
+            if deleted:
+                ans = f"✅ Successfully removed {len(deleted)} specialist agent(s): {', '.join(deleted)}. Only the Master Supervisor remains active."
+            else:
+                ans = "No specialist agents were found to remove. Only the Master Supervisor remains active."
+
+            state["latest_response"] = ans
+            state["messages"].append({
+                "role": "assistant",
+                "sender_id": "supervisor",
+                "recipient_id": "user",
+                "content": ans,
+            })
+            state["next"] = "FINISH"
+
+        elif action == "SPAWN_AGENT":
             spawn_info = decision.get("spawn_details") or decision
             name = spawn_info.get("name") or "Specialist Agent"
             role = spawn_info.get("role") or "Domain specialist"
