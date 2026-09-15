@@ -1,12 +1,13 @@
 name: Deploy Production Environment
 
+# NEVER auto-deploy to production: Requires manual dispatch and confirmation
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type 'DEPLOY_PRODUCTION' to confirm manual production rollout"
+        required: true
+        default: ""
 
 concurrency:
   group: deploy-production
@@ -19,8 +20,17 @@ jobs:
     environment: production
 
     steps:
+      - name: Validate Manual Approval Gate
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DEPLOY_PRODUCTION" ]; then
+            echo "❌ ERROR: Production deployment aborted. You must enter 'DEPLOY_PRODUCTION' to proceed."
+            exit 1
+          fi
+          echo "✅ Manual production deployment confirmation verified."
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
 
       - name: Set up Cloud SDK Authentication
         if: env.GCP_SA_KEY != ''

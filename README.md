@@ -129,19 +129,12 @@ docker compose down
 
 The project includes an enterprise-grade, automated CI/CD lifecycle powered by **GitHub Actions** and strict security protocols:
 
-### Workflows Overview
-- **`.github/workflows/ci.yml`**: Triggers on every push or pull request to `main` and `feature/*`.
-  - Enforces automated security scanning via `scripts/validate_secrets.py`.
-  - Executes flake8 syntax/style validation.
-  - Runs all 17 unit, integration, and E2E pipeline tests.
-  - Uploads code coverage reports.
-- **`.github/workflows/deploy-staging.yml`**: Continuous Deployment to the Cloud Run Staging environment on pushes to `feature/*` or manual dispatch.
-- **`.github/workflows/deploy-prod.yml`**: Zero-downtime Continuous Deployment to Cloud Run Production upon release tags or merges to `main`.
+### Branch Naming & Promotion Workflow
+- **Task-Specific Branch Naming**: Branches must be named specifically after the task being performed (`feature/<task-name>`, `fix/<task-name>`, `chore/<task-name>`). Generic names (`test`, `dev`, `my-branch`) are prohibited.
+- **Continuous Integration (`ci.yml`)**: Triggers on PRs to `main` and side branch pushes. Intercepts secrets with `validate_secrets.py`, enforces linting, executes the 17-test suite in hermetic mock mode, and validates Docker builds.
+- **Continuous Deployment to Staging (`deploy-staging.yml`)**: Automatically triggers when a feature PR is **merged into `main`**. Deploys to `mas-backend-staging` on Google Cloud Run and runs live smoke probes.
+- **Production Rollout Gate (`deploy-prod.yml`)**: **NEVER auto-deploys to production**, even if all tests pass. Requires explicit manual trigger via `workflow_dispatch`, operator confirmation input (`DEPLOY_PRODUCTION`), and GitHub Environment `production` required reviewer sign-off.
 
-### Remote Work Security & Secret Protection
-- **Zero-Commit Policy**: Secrets (`.env`, `*.key`, `*credentials*.json`) are excluded via `.gitignore`.
-- **Pre-Flight Scanner**: `scripts/validate_secrets.py` blocks any commit or CI build containing exposed Google AI Studio keys, GCP service account credentials, or private keys.
-- **GitHub Secrets Configuration**: Deployment environments utilize isolated GitHub Environment secrets (`GEMINI_API_KEY`, `GCP_PROJECT_ID`, `GCP_SA_KEY`).
 
 ---
 
