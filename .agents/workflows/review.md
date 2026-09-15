@@ -16,4 +16,8 @@ Use this workflow to review pending code changes against project standards.
    - Execute `.venv/bin/python run_tests.py` or `pytest tests/` to verify all 17 tests pass.
 5. **Inspect SQLite Concurrency**:
    - Confirm WAL mode is enabled on connection (`PRAGMA journal_mode=WAL;`).
+6. **Verify Branch Naming & Pull Request**:
+   - Ensure the branch is named specifically according to the task (`feature/<task-name>`, `fix/<task-name>`).
+   - Confirm changes are committed to the side branch, pushed to remote, and a Pull Request is opened via `gh pr create`.
+
 

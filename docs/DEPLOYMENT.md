@@ -328,6 +328,10 @@ All branches MUST be named specifically according to the task being addressed:
 - `docs/<task-description>`: Documentation, guides, and specifications (e.g., `docs/secret-storage-matrix`).
 *Generic names like `test`, `dev`, `my-branch`, `feature-1`, or `patch` are strictly forbidden.*
 
+##### Automated Pull Request Protocol:
+When committing changes to a task-specific side branch, push to remote and automatically open a Pull Request against `main` using `gh pr create`.
+
+
 ```mermaid
 graph TD
     subgraph 1_FeatureBranch ["1. Feature Branch (Task-Specific Name)"]

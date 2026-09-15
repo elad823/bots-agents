@@ -131,9 +131,11 @@ The project includes an enterprise-grade, automated CI/CD lifecycle powered by *
 
 ### Branch Naming & Promotion Workflow
 - **Task-Specific Branch Naming**: Branches must be named specifically after the task being performed (`feature/<task-name>`, `fix/<task-name>`, `chore/<task-name>`). Generic names (`test`, `dev`, `my-branch`) are prohibited.
+- **Auto-Open Pull Request**: When committing to a side branch, push to remote and automatically open a Pull Request against `main` via `gh pr create`.
 - **Continuous Integration (`ci.yml`)**: Triggers on PRs to `main` and side branch pushes. Intercepts secrets with `validate_secrets.py`, enforces linting, executes the 17-test suite in hermetic mock mode, and validates Docker builds.
 - **Continuous Deployment to Staging (`deploy-staging.yml`)**: Automatically triggers when a feature PR is **merged into `main`**. Deploys to `mas-backend-staging` on Google Cloud Run and runs live smoke probes.
 - **Production Rollout Gate (`deploy-prod.yml`)**: **NEVER auto-deploys to production**, even if all tests pass. Requires explicit manual trigger via `workflow_dispatch`, operator confirmation input (`DEPLOY_PRODUCTION`), and GitHub Environment `production` required reviewer sign-off.
+
 
 
 ---

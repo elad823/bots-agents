@@ -24,6 +24,8 @@
   - *Never use generic names like `test`, `dev`, `my-branch`.*
 - **Promotion Flow (Option 1)**:
   - Always work on a task branch and open a PR against `main`.
+  - **Auto-Open Pull Request**: When committing to a side branch, always push to remote and automatically open a Pull Request against `main` via `gh pr create`.
   - Merging to `main` automatically triggers deployment to **Staging** (`mas-backend-staging`).
   - **Production Guardrail**: Production deployment is **NEVER automatic**, even if all tests pass. Production rollouts require explicit manual dispatch (`workflow_dispatch`) with `DEPLOY_PRODUCTION` confirmation.
+
 
