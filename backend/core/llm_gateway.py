@@ -63,23 +63,69 @@ class LLMGateway:
     """
 
     def __init__(self) -> None:
-        self.api_key = settings.gemini_api_key
         self.default_model = settings.gemini_model_default
-        self._is_mock_mode = (
-            not self.api_key
-            or self.api_key == "mock_dev_key"
-            or self.api_key.startswith("mock_")
-            or not HAS_GENAI
-        )
-        if not self._is_mock_mode and HAS_GENAI:
+        if not self.is_mock_mode and HAS_GENAI:
             genai.configure(api_key=self.api_key)
             logger.info("LLMGateway initialized with live Google AI Studio API key.")
         else:
-            logger.info("LLMGateway initialized in local Mock/Dev Mode (safe for offline testing).")
+            logger.info("LLMGateway initialized in Mock/Dev mode or using direct REST fallback.")
+
+    @property
+    def api_key(self) -> str:
+        return settings.gemini_api_key
 
     @property
     def is_mock_mode(self) -> bool:
-        return self._is_mock_mode
+        key = self.api_key
+        return not key or key == "mock_dev_key" or key.startswith("mock_")
+
+    async def _call_rest_api(
+        self,
+        prompt: str,
+        system_prompt: str | None,
+        model_name: str,
+        caller_id: str,
+    ) -> str:
+        """Direct REST invocation for Google Generative Language API without SDK dependency."""
+        import urllib.request
+        import urllib.error
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+        payload: dict[str, Any] = {
+            "contents": [{"parts": [{"text": prompt}]}]
+        }
+        if system_prompt:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_prompt}]
+            }
+
+        def _sync_request() -> str:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    res = json.loads(resp.read().decode("utf-8"))
+                    candidates = res.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "")
+                    return ""
+            except urllib.error.HTTPError as err:
+                status = err.code
+                body = err.read().decode("utf-8", errors="ignore")
+                if status == 429 or "resourceexhausted" in body.lower() or "quota" in body.lower():
+                    logger.warning("Upstream 429 hit for '%s'. Retrying with backoff...", caller_id)
+                    raise TransientLLMException(f"Upstream rate limit hit (HTTP 429): {body}")
+                logger.error("Direct Gemini REST call failed (%s): %s", status, body)
+                raise RuntimeError(f"Gemini API error (HTTP {status}): {body}") from err
+
+        return await asyncio.to_thread(_sync_request)
 
     @retry(
         reraise=True,
@@ -101,27 +147,31 @@ class LLMGateway:
             logger.info("Caller '%s' paused for %.2fs due to 15 RPM rate limiting.", caller_id, wait_time)
 
         target_model = model_name or self.default_model
+        if "1.5" in target_model:
+            target_model = "gemini-2.5-flash"
 
         # 2. Mock mode handling
-        if self._is_mock_mode:
+        if self.is_mock_mode:
             return self._mock_generate_response(prompt, system_prompt, caller_id)
 
-        # 3. Live Google AI Studio invocation
-        try:
-            model = genai.GenerativeModel(
-                model_name=target_model,
-                system_instruction=system_prompt if system_prompt else None,
-            )
-            # Run blocking SDK in threadpool
-            response = await asyncio.to_thread(model.generate_content, prompt)
-            return response.text
-        except Exception as exc:
-            err_msg = str(exc).lower()
-            if "429" in err_msg or "resourceexhausted" in err_msg or "quota" in err_msg:
-                logger.warning("Upstream 429 ResourceExhausted hit for caller '%s'. Retrying with backoff...", caller_id)
-                raise TransientLLMException(f"Upstream rate limit hit: {exc}") from exc
-            logger.error("LLM call failed for '%s': %s", caller_id, exc)
-            raise
+        # 3. Live Google AI Studio invocation (try SDK first, fallback to REST)
+        if HAS_GENAI:
+            try:
+                genai.configure(api_key=self.api_key)
+                model = genai.GenerativeModel(
+                    model_name=target_model,
+                    system_instruction=system_prompt if system_prompt else None,
+                )
+                response = await asyncio.to_thread(model.generate_content, prompt)
+                return response.text
+            except Exception as exc:
+                err_msg = str(exc).lower()
+                if "429" in err_msg or "resourceexhausted" in err_msg or "quota" in err_msg:
+                    logger.warning("Upstream 429 ResourceExhausted hit for caller '%s'. Retrying with backoff...", caller_id)
+                    raise TransientLLMException(f"Upstream rate limit hit: {exc}") from exc
+                logger.warning("genai SDK failed, attempting direct REST fallback: %s", exc)
+
+        return await self._call_rest_api(prompt, system_prompt, target_model, caller_id)
 
     def _mock_generate_response(
         self,
