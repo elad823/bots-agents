@@ -39,3 +39,20 @@ Use this skill when deploying or testing containerized instances of the Autonomo
 1. Push repository to GitHub.
 2. Link repo in Streamlit Community Cloud with main path `frontend/app.py`.
 3. Set secret `BACKEND_API_URL = "https://your-cloud-run-url.a.run.app"`.
+
+## 4. Automated DevOps Scripts & GitHub Actions CI/CD
+1. **Pre-flight Secret Check**:
+   ```bash
+   python3 scripts/validate_secrets.py
+   ```
+2. **Deploy to Staging**:
+   ```bash
+   bash scripts/deploy_staging.sh
+   # Or push to feature/* to trigger .github/workflows/deploy-staging.yml
+   ```
+3. **Deploy to Production**:
+   ```bash
+   bash scripts/deploy_prod.sh
+   # Or create release tag (v*.*.*) to trigger .github/workflows/deploy-prod.yml
+   ```
+

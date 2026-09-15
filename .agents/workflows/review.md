@@ -10,7 +10,10 @@ Use this workflow to review pending code changes against project standards.
 2. **Verify Rate-Limiting Guardrails**:
    - Ensure all LLM calls invoke `RateLimiter.acquire()` before sending requests to Gemini.
    - Check that `tenacity` retry decorators handle `ResourceExhausted` (429).
-3. **Run Test Suite**:
-   - Execute `pytest tests/` to verify rate-limiter, repository, and supervisor tests pass.
-4. **Inspect SQLite Concurrency**:
+3. **Run Pre-Flight Secret Scanner**:
+   - Run `python3 scripts/validate_secrets.py` to confirm 0 credential or key leaks.
+4. **Run Test Suite**:
+   - Execute `.venv/bin/python run_tests.py` or `pytest tests/` to verify all 17 tests pass.
+5. **Inspect SQLite Concurrency**:
    - Confirm WAL mode is enabled on connection (`PRAGMA journal_mode=WAL;`).
+

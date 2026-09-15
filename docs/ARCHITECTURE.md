@@ -279,6 +279,11 @@ The project implements the Antigravity & Gemini Project Configuration Standard, 
 bots-agents/
 ├── GEMINI.md                 # Root context loaded at session start
 ├── mcp_config.json           # Root MCP tool integration config
+├── .github/
+│   └── workflows/            # GitHub Actions CI/CD automation pipelines
+│       ├── ci.yml            # Automated test suite, flake8 lint, secret scanner
+│       ├── deploy-staging.yml# Staging deployment pipeline
+│       └── deploy-prod.yml   # Production deployment pipeline
 ├── .agents/                  # Antigravity project customization root
 │   ├── settings.json         # Model parameters, permissions, guardrails
 │   ├── mcp_config.json       # Workspace MCP servers configuration
@@ -303,7 +308,7 @@ bots-agents/
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   ├── CODING_STANDARDS.md
-│   └── DEPLOYMENT.md         # Docker & Zero-Cost Cloud Deployment Guide
+│   └── DEPLOYMENT.md         # Docker, Cloud Run & CI/CD Deployment Guide
 ├── data/
 │   └── mas_database.db       # Local SQLite store (persisted via Docker volume)
 ├── backend/
@@ -347,15 +352,27 @@ bots-agents/
 │   │   └── agent_forge.py    # Agent creation & prompt editor
 │   └── utils/
 │       └── api_client.py     # Frontend HTTP client interacting with FastAPI
-├── tests/
+├── scripts/                  # DevOps automation & security tooling
+│   ├── validate_secrets.py   # Pre-flight secret leak detection scanner
+│   ├── deploy_staging.sh     # Automated staging deployment script
+│   └── deploy_prod.sh        # Automated production deployment script
+├── tests/                    # 17 Unit, integration, and E2E pipeline tests
 │   ├── test_rate_limiter.py
+│   ├── test_database.py
 │   ├── test_repositories.py
 │   ├── test_supervisor.py
-│   └── test_scheduler.py
+│   ├── test_scheduler.py
+│   ├── test_api.py
+│   ├── test_frontend_client.py
+│   ├── test_e2e_persistence.py
+│   └── test_e2e_pipeline.py
 ├── docker-compose.yml        # Local multi-container orchestration with persistent volume
-├── .env.example
-├── README.md
-└── requirements.txt
+├── .env.example              # Development environment template
+├── .env.staging.example      # Staging environment template
+├── .env.production.example   # Production environment template
+├── pytest.ini
+├── requirements.txt
+└── run_tests.py              # Test suite orchestrator
 ```
 
 
