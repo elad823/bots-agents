@@ -136,7 +136,19 @@ The project includes an enterprise-grade, automated CI/CD lifecycle powered by *
 - **Continuous Deployment to Staging (`deploy-staging.yml`)**: Automatically triggers when a feature PR is **merged into `main`**. Deploys to `mas-backend-staging` on Google Cloud Run and runs live smoke probes.
 - **Production Rollout Gate (`deploy-prod.yml`)**: **NEVER auto-deploys to production**, even if all tests pass. Requires explicit manual trigger via `workflow_dispatch`, operator confirmation input (`DEPLOY_PRODUCTION`), and GitHub Environment `production` required reviewer sign-off.
 
+### Workflows Overview
+- **`.github/workflows/ci.yml`**: Triggers on every push or pull request to `main` and side branches.
+  - 🔒 **Security Gate**: Intercepts leaks with `scripts/validate_secrets.py`.
+  - 🧪 **Test Suite Gate**: Runs the full 17-test suite (unit, integration, and E2E pipeline) with coverage reporting.
+  - 🐳 **Docker Gate**: Validates that backend and frontend Docker containers build cleanly.
+- **`.github/workflows/deploy-staging.yml`**: Continuous Deployment to Cloud Run Staging (`mas-backend-staging`) upon merge to `main` or manual dispatch.
+- **`.github/workflows/deploy-prod.yml`**: Strictly manual, zero-downtime deployment to Cloud Run Production (`mas-backend-prod`) requiring explicit confirmation and environment approval.
 
+### Secret Management Across Environments (`test` / `stage` / `prod`)
+- **`test` (CI & Local)**: Mock mode (`GEMINI_API_KEY=mock_dev_key`) runs hermetic tests with 0 quota consumption and 0 credential exposure. Local `.env` is gitignored.
+- **`stage` (Staging)**: Dedicated staging API key stored in **Google Cloud Secret Manager** and GitHub Environment `staging`.
+- **`prod` (Production)**: Isolated production API key in **Google Cloud Secret Manager** and GitHub Environment `production` (with manual approval protection rules).
+- **Pre-Flight Scanner**: `python3 scripts/validate_secrets.py` blocks any commit or CI build with exposed keys or uncommitted credentials.
 
 ---
 

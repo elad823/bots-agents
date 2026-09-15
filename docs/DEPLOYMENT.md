@@ -397,17 +397,55 @@ For manual or local CLI triggers, automated shell scripts mirror the CI/CD pipel
 
 #### 6.4. Secret Storage & Isolation Strategy Per Environment (`test` / `stage` / `prod`)
 
-When collaborating remotely or pushing to GitHub:
-- **Never commit `.env` or credential files**: All `.env`, `*.key`, `*credentials*.json` are strictly ignored in `.gitignore`.
-- **Environment Templates**:
-  - `.env.example`: Template for local development.
-  - `.env.staging.example`: Template for staging configuration.
-  - `.env.production.example`: Template for production configuration.
-- **GitHub Environment Secrets**:
-  Configure the following secrets in **Settings > Environments > staging / production**:
-  | Secret Name | Description | Example / Format |
-  | :--- | :--- | :--- |
-  | `GEMINI_API_KEY` | Google AI Studio Gemini API Key | `AIzaSy...` |
-  | `GCP_PROJECT_ID` | Google Cloud Platform Project ID | `mas-project-123` |
-  | `GCP_SA_KEY` | GCP Service Account JSON Key (with Cloud Run Admin & Build permissions) | `{"type": "service_account", ...}` |
+To prevent credential leaks and ensure zero disruption between testing and production, secrets and sensitive configurations are strictly separated across three environments:
+
+| Environment | Purpose | Where Secrets Are Stored | How They Are Accessed at Runtime | Live Gemini API Key? |
+| :--- | :--- | :--- | :--- | :---: |
+| **`test`** (Local & CI) | Unit tests, PR verification, linting, regression testing | • Local: `.env` (gitignored)<br>• GitHub Actions CI: In-memory runner environment | Injected as environment variables (`mock_dev_key`); tests run against SQLite `:memory:` or temporary databases | ❌ **No** (Hermetic mock mode, zero quota burn) |
+| **`stage`** (Staging) | Pre-production testing, live API integration, user acceptance | • GitHub: **Environment Secrets (`staging`)**<br>• GCP: **Google Cloud Secret Manager**<br>• UI: **Streamlit Cloud Secrets** | Cloud Run mounts secrets via IAM service account (`--set-secrets`); Streamlit reads via TOML |  **Yes** (Dedicated Staging Gemini Key) |
+| **`prod`** (Production) | Live end-user traffic, high-reliability operation | • GitHub: **Environment Secrets (`production`)** *(protected with approval rules)*<br>• GCP: **Google Cloud Secret Manager**<br>• UI: **Streamlit Cloud Secrets** | Cloud Run mounts secrets via IAM service account; zero-downtime blue/green rollout |  **Yes** (Isolated Production Gemini Key) |
+
+##### Detailed Breakdown:
+
+1. **Test Environment (`test`)**:
+   - **Local Developer Machine**: Configuration is stored in `.env` (strictly ignored by `.gitignore`).
+   - **GitHub Actions CI Runner**: Runs automated tests in `ci.yml` with `GEMINI_API_KEY=mock_dev_key`. The application automatically operates in high-fidelity mock mode, allowing all 17 unit, integration, and E2E pipeline tests to pass with 100% test coverage without consuming any Google AI Studio rate-limit quota or exposing real keys.
+
+2. **Staging Environment (`stage`)**:
+   - **FastAPI on Cloud Run**: Stored in **Google Cloud Secret Manager** (`gemini-api-key-staging`) and injected into the container runtime via Cloud Run IAM bindings:
+     ```bash
+     gcloud run deploy mas-backend-staging \
+       --set-secrets="GEMINI_API_KEY=gemini-api-key-staging:latest" \
+       --set-env-vars="ENVIRONMENT=staging,DATABASE_PATH=/app/data/mas_database.db,MAX_RPM_LIMIT=14"
+     ```
+   - **GitHub Actions (`deploy-staging.yml`)**: Stored under GitHub Repo **Settings > Environments > `staging`**:
+     - `GEMINI_API_KEY`: Staging Google AI Studio API key.
+     - `GCP_PROJECT_ID`: GCP project ID.
+     - `GCP_SA_KEY`: Service account JSON key with Cloud Run Admin and Cloud Build permissions.
+   - **Streamlit Community Cloud**: Configured in Staging Streamlit App **Settings > Secrets**:
+     ```toml
+     BACKEND_API_URL = "https://mas-backend-staging-xyz.a.run.app"
+     ```
+
+3. **Production Environment (`prod`)**:
+   - **FastAPI on Cloud Run**: Stored in **Google Cloud Secret Manager** (`gemini-api-key-prod`). Completely isolated from staging keys so traffic spikes or load testing in staging never throttle production rate limits.
+   - **GitHub Actions (`deploy-prod.yml`)**: Stored under GitHub Repo **Settings > Environments > `production`**. Protected by GitHub Environment **"Required reviewers"** rules, requiring manual approval before production deployment can proceed.
+   - **Streamlit Community Cloud**: Configured in Production Streamlit App **Settings > Secrets**:
+     ```toml
+     BACKEND_API_URL = "https://mas-backend-prod-xyz.a.run.app"
+     ```
+
+##### Quick Setup via GitHub CLI:
+```bash
+# Set Staging Secrets
+gh secret set GEMINI_API_KEY --env staging --body "AIzaSy_STAGING_KEY..."
+gh secret set GCP_PROJECT_ID --env staging --body "your-gcp-project-id"
+gh secret set GCP_SA_KEY     --env staging < path-to-staging-sa-key.json
+
+# Set Production Secrets
+gh secret set GEMINI_API_KEY --env production --body "AIzaSy_PROD_KEY..."
+gh secret set GCP_PROJECT_ID --env production --body "your-gcp-project-id"
+gh secret set GCP_SA_KEY     --env production < path-to-prod-sa-key.json
+```
+
 
