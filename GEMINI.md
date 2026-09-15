@@ -12,7 +12,7 @@ Welcome to the **Autonomous Multi-Agent System (MAS)** project workspace. This f
 - **Frontend / Dashboard**: Streamlit (Visual control plane, live status indicators 🟢 Idle / 🟠 Running / 🔴 Error, task manager).
 - **Database / State**: SQLite with Write-Ahead Logging (`WAL` mode) in `data/mas_database.db`.
 - **Background Tasks**: APScheduler (`AsyncIOScheduler`) for autonomous recurring cron and interval jobs.
-- **Infrastructure**: Docker, `docker-compose.yml` with named persistent volume `mas_sqlite_data`, zero-cost deployment to Google Cloud Run & Streamlit Community Cloud.
+- **Infrastructure**: Docker, `docker-compose.yml` with named persistent volume `mas_sqlite_data`, zero-cost deployment to Google Cloud Run & Streamlit Community Cloud, automated GitHub Actions CI/CD pipelines (`ci.yml`, `deploy-staging.yml`, `deploy-prod.yml`), and pre-flight security scanner (`scripts/validate_secrets.py`).
 
 ---
 
@@ -26,12 +26,17 @@ Welcome to the **Autonomous Multi-Agent System (MAS)** project workspace. This f
 3. **Strict Python Typing**: Full type annotations (`typing`, `list[...]`, `T | None`, `TypedDict`, Pydantic V2 models). Zero untyped function signatures.
 4. **Non-Blocking Asynchronous Code**: Use `async`/`await` for all I/O, database access, and HTTP requests (`httpx.AsyncClient`).
 5. **Persistent State**: Never write SQLite data to ephemeral container directories; always store in `/app/data` backed by persistent volume.
+6. **Zero-Secret Leakage**: Never commit `.env` or credential files. Always verify with `python3 scripts/validate_secrets.py` before committing.
 
 ---
 
 ## 3. Project Configuration & Tooling
 - **Project Rules**: Located in `.agents/rules/` (`code-style.md`, `testing.md`, `api-conventions.md`, `rate-limiting.md`).
 - **Skills**: Located in `.agents/skills/` (e.g., `deploy/SKILL.md`).
+- **Workflows**: Located in `.agents/workflows/` (`review.md`, `fix-issue.md`).
 - **Hooks**: Lifecycle hooks configured in `.agents/hooks.json` and `.agents/hooks/`.
-- **MCP Servers**: Configured in `.agents/mcp_config.json`.
+- **MCP Servers**: Configured in `mcp_config.json` and `.agents/mcp_config.json`.
+- **Automation & Security**: `scripts/validate_secrets.py`, `scripts/deploy_staging.sh`, `scripts/deploy_prod.sh`.
+- **GitHub Actions CI/CD**: Located in `.github/workflows/` (`ci.yml`, `deploy-staging.yml`, `deploy-prod.yml`).
 - **Documentation**: Comprehensive specs in `docs/` (`PRD.md`, `ARCHITECTURE.md`, `CODING_STANDARDS.md`, `DEPLOYMENT.md`).
+

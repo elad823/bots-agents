@@ -24,6 +24,11 @@ An autonomous Multi-Agent System inspired by **Grok**, built with **Python 3.11+
 bots-agents/
 ├── GEMINI.md                        # Project context loaded at session start
 ├── mcp_config.json                  # Root MCP tool integration configuration
+├── .github/
+│   └── workflows/                   # GitHub Actions CI/CD automation pipelines
+│       ├── ci.yml                   # Automated tests, linting, and secret scanner
+│       ├── deploy-staging.yml       # Staging deployment workflow
+│       └── deploy-prod.yml          # Production deployment workflow
 ├── .agents/                         # Antigravity project customization suite
 │   ├── settings.json                # Model selection & guardrails
 │   ├── rules/                       # Modular rules (code-style, testing, rate-limiting)
@@ -50,8 +55,16 @@ bots-agents/
 │   ├── app.py                       # Main Streamlit dashboard
 │   ├── components/                  # Sidebar, Chat console, Scheduler view, Agent forge
 │   └── utils/api_client.py          # Backend HTTP client
+├── scripts/                         # Automation & DevOps tooling
+│   ├── validate_secrets.py          # Pre-flight secret leak detection scanner
+│   ├── deploy_staging.sh            # Staging Cloud Run deployment script
+│   └── deploy_prod.sh               # Production Cloud Run deployment script
+├── tests/                           # Complete test suite (17 unit, integration, and e2e tests)
 ├── data/                            # Persistent SQLite database store
 ├── docker-compose.yml               # Local multi-container orchestration
+├── .env.example                     # Local development environment template
+├── .env.staging.example             # Staging environment template
+├── .env.production.example          # Production environment template
 ├── requirements.txt
 └── run_tests.py                     # Self-contained test suite runner
 ```
@@ -68,9 +81,15 @@ cp .env.example .env
 ```
 *(Note: If left as `mock_dev_key`, the system automatically runs in high-fidelity mock mode, perfect for offline development and testing).*
 
-### 2. Run Automated Test Suite
-Run the 16-test suite verifying the rate limiter, repositories, supervisor routing, dynamic agent spawning, scheduler, API routes, and container persistence:
+### 2. Run Automated Test Suite & Pre-Flight Secret Scanner
+Validate that your codebase has zero secret leaks and all 17 unit, integration, and E2E pipeline tests pass:
 ```bash
+# Run security & secret leak audit
+python3 scripts/validate_secrets.py
+
+# Run complete 17-test suite (using virtual environment)
+.venv/bin/python run_tests.py
+# Or with system python if dependencies are installed:
 python3 run_tests.py
 ```
 
@@ -106,12 +125,33 @@ docker compose down
 
 ---
 
+## 🔄 CI/CD Pipeline & Remote DevOps Automation
+
+The project includes an enterprise-grade, automated CI/CD lifecycle powered by **GitHub Actions** and strict security protocols:
+
+### Workflows Overview
+- **`.github/workflows/ci.yml`**: Triggers on every push or pull request to `main` and `feature/*`.
+  - Enforces automated security scanning via `scripts/validate_secrets.py`.
+  - Executes flake8 syntax/style validation.
+  - Runs all 17 unit, integration, and E2E pipeline tests.
+  - Uploads code coverage reports.
+- **`.github/workflows/deploy-staging.yml`**: Continuous Deployment to the Cloud Run Staging environment on pushes to `feature/*` or manual dispatch.
+- **`.github/workflows/deploy-prod.yml`**: Zero-downtime Continuous Deployment to Cloud Run Production upon release tags or merges to `main`.
+
+### Remote Work Security & Secret Protection
+- **Zero-Commit Policy**: Secrets (`.env`, `*.key`, `*credentials*.json`) are excluded via `.gitignore`.
+- **Pre-Flight Scanner**: `scripts/validate_secrets.py` blocks any commit or CI build containing exposed Google AI Studio keys, GCP service account credentials, or private keys.
+- **GitHub Secrets Configuration**: Deployment environments utilize isolated GitHub Environment secrets (`GEMINI_API_KEY`, `GCP_PROJECT_ID`, `GCP_SA_KEY`).
+
+---
+
 ## ☁️ Zero-Cost Cloud Deployment Guide
 
-See **[docs/DEPLOYMENT.md](file:///Users/eladcohen/Programming/smartflow-app/bots-agents/docs/DEPLOYMENT.md)** for detailed instructions:
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for complete step-by-step instructions:
 1. **FastAPI Backend on Google Cloud Run**:
    - Zero-cost within Cloud Run's free tier (2M requests/month, 360k vCPU-seconds).
    - Mount a free Google Cloud Storage bucket (5GB free) via Cloud Run Volume Mount (GCS FUSE) to persist `/app/data/mas_database.db`.
 2. **Frontend on Streamlit Community Cloud**:
    - Connect your GitHub repository at [share.streamlit.io](https://share.streamlit.io/).
    - Add Secret `BACKEND_API_URL = "https://your-cloud-run-service.a.run.app"`.
+

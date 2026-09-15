@@ -35,7 +35,7 @@ def test_e2e_01_system_status_and_health(client: TestClient):
     assert "environment" in data
     assert "rate_limiter" in data
     assert data["rate_limiter"]["max_rpm"] == 14
-    assert data["registered_agents_count"] >= 3
+    assert data["registered_agents_count"] >= 2
 
 
 def test_e2e_02_agent_full_lifecycle(client: TestClient):

@@ -275,3 +275,97 @@ STREAMLIT_SERVER_PORT=8501
    BACKEND_API_URL = "https://mas-backend-xyz.a.run.app"
    ```
 5. Click **Deploy**. Your visual MAS control plane is live with zero monthly hosting cost.
+
+---
+
+### 6. Automated CI/CD Pipelines & Remote DevOps Infrastructure
+
+To ensure enterprise-grade software delivery and zero credential exposure, the project integrates an automated **GitHub Actions CI/CD pipeline** with multi-stage environment promotion:
+
+```mermaid
+graph TD
+    subgraph DeveloperWorkstation ["Developer Environment"]
+        Dev["Git Commit on feature/*"]
+        LocalAudit["Pre-flight: validate_secrets.py + run_tests.py"]
+        Dev --> LocalAudit
+    end
+
+    subgraph GitHubActions ["GitHub Actions CI/CD"]
+        CI["1. CI Workflow (.github/workflows/ci.yml)"]
+        SecretScan["Secret Leak Scanner (validate_secrets.py)"]
+        UnitTests["17/17 Unit & E2E Tests (pytest)"]
+        Lint["Flake8 Code Style"]
+        
+        DeployStaging["2. Staging CD (.github/workflows/deploy-staging.yml)"]
+        DeployProd["3. Prod CD (.github/workflows/deploy-prod.yml)"]
+
+        CI --> SecretScan
+        CI --> UnitTests
+        CI --> Lint
+    end
+
+    subgraph CloudEnvironments ["Google Cloud Platform"]
+        StagingRun["Cloud Run Staging (mas-backend-staging)"]
+        ProdRun["Cloud Run Production (mas-backend-prod)"]
+    end
+
+    LocalAudit -->|git push| CI
+    CI -->|Pass on feature/*| DeployStaging
+    DeployStaging --> StagingRun
+    CI -->|Pass on main / release tag| DeployProd
+    DeployProd --> ProdRun
+```
+
+#### 6.1. GitHub Actions Workflows
+
+1. **Continuous Integration (`.github/workflows/ci.yml`)**:
+   - **Triggers**: Every `push` and `pull_request` targeting `main` or `feature/*`.
+   - **Pre-Flight Secret Scan**: Executes `python3 scripts/validate_secrets.py` to intercept leaked API keys, tokens, or credential files before any tests run.
+   - **Static Analysis**: Runs `flake8` to enforce PEP 8 standards.
+   - **Full Test Suite**: Executes `run_tests.py` verifying all 17 unit, integration, and E2E pipeline tests.
+   - **Artifact Upload**: Generates and uploads code coverage reports.
+
+2. **Continuous Deployment: Staging (`.github/workflows/deploy-staging.yml`)**:
+   - **Triggers**: Automatic push to `feature/*` or manual `workflow_dispatch`.
+   - **Environment**: GitHub Environment `staging`.
+   - **Build & Push**: Builds `backend/Dockerfile` with Google Cloud Build and tags as `gcr.io/$GCP_PROJECT_ID/mas-backend-staging:${{ github.sha }}`.
+   - **Cloud Run Deployment**: Deploys to `mas-backend-staging` with staging environment variables and GCS volume mount.
+   - **Automated Health Probe**: Validates `/api/system/status` on the deployed staging instance.
+
+3. **Continuous Deployment: Production (`.github/workflows/deploy-prod.yml`)**:
+   - **Triggers**: Release tags (`v*.*.*`) or merged PRs to `main`.
+   - **Environment**: GitHub Environment `production` (with manual approval protection rules).
+   - **Build & Push**: Tags container image with release version and `latest`.
+   - **Zero-Downtime Rollout**: Cloud Run performs blue/green revision switching once health checks pass.
+
+#### 6.2. Automated Shell Deployment Scripts
+
+For manual or local CLI triggers, automated shell scripts mirror the CI/CD pipeline with pre-flight safety checks:
+
+- **`scripts/validate_secrets.py`**:
+  - Scans tracked and workspace files for Google AI Studio keys (`AIzaSy...`), GCP Service Account keys, private keys (`BEGIN PRIVATE KEY`), and dangerous uncommitted `.env` files.
+  - Returns exit code `1` upon any detection to immediately halt build pipelines.
+- **`scripts/deploy_staging.sh`**:
+  - Loads `.env.staging` (or prompts for credentials).
+  - Executes `scripts/validate_secrets.py` and `run_tests.py` prior to build.
+  - Submits container build and deploys to Cloud Run staging service.
+- **`scripts/deploy_prod.sh`**:
+  - Enforces confirmation prompts before deploying to production.
+  - Runs all safety audits and deploys to `mas-backend-prod`.
+
+#### 6.3. Remote Work Security & Secret Management
+
+When collaborating remotely or pushing to GitHub:
+- **Never commit `.env` or credential files**: All `.env`, `*.key`, `*credentials*.json` are strictly ignored in `.gitignore`.
+- **Environment Templates**:
+  - `.env.example`: Template for local development.
+  - `.env.staging.example`: Template for staging configuration.
+  - `.env.production.example`: Template for production configuration.
+- **GitHub Environment Secrets**:
+  Configure the following secrets in **Settings > Environments > staging / production**:
+  | Secret Name | Description | Example / Format |
+  | :--- | :--- | :--- |
+  | `GEMINI_API_KEY` | Google AI Studio Gemini API Key | `AIzaSy...` |
+  | `GCP_PROJECT_ID` | Google Cloud Platform Project ID | `mas-project-123` |
+  | `GCP_SA_KEY` | GCP Service Account JSON Key (with Cloud Run Admin & Build permissions) | `{"type": "service_account", ...}` |
+

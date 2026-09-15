@@ -52,3 +52,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+Library/
+.streamlit/secrets.toml
+
