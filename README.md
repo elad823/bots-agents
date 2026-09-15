@@ -131,17 +131,18 @@ The project includes an enterprise-grade, automated CI/CD lifecycle powered by *
 
 ### Workflows Overview
 - **`.github/workflows/ci.yml`**: Triggers on every push or pull request to `main` and `feature/*`.
-  - Enforces automated security scanning via `scripts/validate_secrets.py`.
-  - Executes flake8 syntax/style validation.
-  - Runs all 17 unit, integration, and E2E pipeline tests.
-  - Uploads code coverage reports.
+  - 🔒 **Security Gate**: Intercepts leaks with `scripts/validate_secrets.py`.
+  - 🧪 **Test Suite Gate**: Runs the full 17-test suite (unit, integration, and E2E pipeline) with coverage reporting.
+  - 🐳 **Docker Gate**: Validates that backend and frontend Docker containers build cleanly.
 - **`.github/workflows/deploy-staging.yml`**: Continuous Deployment to the Cloud Run Staging environment on pushes to `feature/*` or manual dispatch.
 - **`.github/workflows/deploy-prod.yml`**: Zero-downtime Continuous Deployment to Cloud Run Production upon release tags or merges to `main`.
 
-### Remote Work Security & Secret Protection
-- **Zero-Commit Policy**: Secrets (`.env`, `*.key`, `*credentials*.json`) are excluded via `.gitignore`.
-- **Pre-Flight Scanner**: `scripts/validate_secrets.py` blocks any commit or CI build containing exposed Google AI Studio keys, GCP service account credentials, or private keys.
-- **GitHub Secrets Configuration**: Deployment environments utilize isolated GitHub Environment secrets (`GEMINI_API_KEY`, `GCP_PROJECT_ID`, `GCP_SA_KEY`).
+### Secret Management Across Environments (`test` / `stage` / `prod`)
+- **`test` (CI & Local)**: Mock mode (`GEMINI_API_KEY=mock_dev_key`) runs hermetic tests with 0 quota consumption and 0 credential exposure. Local `.env` is gitignored.
+- **`stage` (Staging)**: Dedicated staging API key stored in **Google Cloud Secret Manager** and GitHub Environment `staging`.
+- **`prod` (Production)**: Isolated production API key in **Google Cloud Secret Manager** and GitHub Environment `production` (with manual approval protection rules).
+- **Pre-Flight Scanner**: `python3 scripts/validate_secrets.py` blocks any commit or CI build with exposed keys or uncommitted credentials.
+
 
 ---
 
