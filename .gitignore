@@ -1,0 +1,54 @@
+# Environment & Secrets (Never commit credentials)
+.env
+.env.*
+.env*.local
+*.env
+!.env.example
+!.env*.example
+*.key
+*.pem
+*.cert
+*.crt
+*credentials*.json
+*sa-key*.json
+gcp-key.json
+secrets.json
+
+# SQLite Databases & Storage (Persistent volume only)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.sqlite
+*.sqlite3
+
+# Python Bytecode & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Logs & Temporary Files
+logs/
+*.log
+scratch/
+
+# OS & Editor Specific
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+.idea/
+.vscode/
+*.swp

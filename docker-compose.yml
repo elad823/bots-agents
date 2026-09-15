@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mas_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-mock_dev_key}
+      - GEMINI_MODEL_DEFAULT=${GEMINI_MODEL_DEFAULT:-gemini-1.5-flash}
+      - DATABASE_PATH=/app/data/mas_database.db
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=http://localhost:8501,http://frontend:8501
+      - MAX_RPM_LIMIT=${MAX_RPM_LIMIT:-14}
+      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
+    volumes:
+      - mas_sqlite_data:/app/data
+      - ./backend:/app/backend
+    restart: unless-stopped
+    networks:
+      - mas_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: mas_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app/frontend
+    restart: unless-stopped
+    networks:
+      - mas_network
+
+volumes:
+  mas_sqlite_data:
+    name: mas_sqlite_data
+    driver: local
+
+networks:
+  mas_network:
+    name: mas_network
+    driver: bridge

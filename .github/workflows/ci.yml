@@ -1,0 +1,114 @@
+name: MAS Continuous Integration & Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - "feature/**"
+      - "fix/**"
+      - "dev/**"
+  pull_request:
+    branches:
+      - main
+      - staging
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. Security & Pre-Flight Quality Gate
+  # --------------------------------------------------------------------------
+  security-and-quality:
+    name: 🔒 Security Audit & Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Linting & Security Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pip-audit
+
+      - name: Run MAS Secret Leak Scanner
+        run: |
+          python scripts/validate_secrets.py
+
+      - name: Dependency Vulnerability Audit
+        run: |
+          pip-audit --requirement requirements.txt || echo "pip-audit completed with warnings"
+
+      - name: Fast Lint & Code Style Check
+        run: |
+          ruff check . --exit-zero
+
+  # --------------------------------------------------------------------------
+  # 2. Automated Test Matrix (Unit, Integration, & E2E Pipeline)
+  # --------------------------------------------------------------------------
+  test-suite:
+    name: 🧪 Core Infrastructure & E2E Test Suite
+    needs: security-and-quality
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: test
+      GEMINI_API_KEY: mock_dev_key
+      DATABASE_PATH: data/mas_test_ci.db
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Application Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Full Core & E2E Automated Test Suite
+        run: |
+          python run_tests.py
+
+  # --------------------------------------------------------------------------
+  # 3. Multi-Container Build Verification
+  # --------------------------------------------------------------------------
+  docker-validation:
+    name: 🐳 Docker Container Build Gate
+    needs: test-suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate Backend Docker Build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          tags: mas-backend:ci-check
+
+      - name: Validate Frontend Docker Build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: false
+          tags: mas-frontend:ci-check

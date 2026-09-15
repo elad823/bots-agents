@@ -1,0 +1,72 @@
+name: Deploy Staging Environment
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: 🚀 Deploy Staging to Google Cloud Run
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK Authentication
+        if: env.GCP_SA_KEY != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for Google Container Registry
+        if: env.GCP_SA_KEY != ''
+        run: |
+          gcloud auth configure-docker --quiet
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Build and Push Staging Backend Image
+        if: env.GCP_SA_KEY != ''
+        run: |
+          IMAGE_TAG="gcr.io/${{ secrets.GCP_PROJECT_ID }}/mas-backend:staging-${{ github.sha }}"
+          docker build -t "$IMAGE_TAG" -f backend/Dockerfile .
+          docker push "$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy to Cloud Run (Staging)
+        if: env.GCP_SA_KEY != ''
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: mas-backend-staging
+          image: ${{ env.IMAGE_TAG }}
+          region: us-central1
+          flags: --port=8080 --memory=1Gi --cpu=1 --min-instances=0 --max-instances=2 --allow-unauthenticated
+          env_vars: |
+            ENVIRONMENT=staging
+            LOG_LEVEL=INFO
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            MAX_RPM_LIMIT=14
+            RATE_LIMIT_WINDOW_SECONDS=60
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Verify Staging Deployment Smoke Test
+        if: steps.deploy.outputs.url != ''
+        run: |
+          STAGING_URL="${{ steps.deploy.outputs.url }}"
+          echo "Testing live staging health endpoint at $STAGING_URL/api/system/status"
+          curl -f -m 30 "$STAGING_URL/api/system/status" || (echo "Staging Health Check Failed" && exit 1)
+          echo "Staging environment verification succeeded!"

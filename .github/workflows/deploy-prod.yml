@@ -1,0 +1,81 @@
+name: Deploy Production Environment
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    name: 🛡️ Production Deployment Gate & Rollout
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK Authentication
+        if: env.GCP_SA_KEY != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for Google Container Registry
+        if: env.GCP_SA_KEY != ''
+        run: |
+          gcloud auth configure-docker --quiet
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Build and Push Production Backend Image
+        if: env.GCP_SA_KEY != ''
+        run: |
+          PROD_TAG="gcr.io/${{ secrets.GCP_PROJECT_ID }}/mas-backend:prod-${{ github.sha }}"
+          docker build -t "$PROD_TAG" -f backend/Dockerfile .
+          docker push "$PROD_TAG"
+          echo "PROD_TAG=$PROD_TAG" >> $GITHUB_ENV
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy to Cloud Run (Production with Zero-Downtime)
+        if: env.GCP_SA_KEY != ''
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: mas-backend-prod
+          image: ${{ env.PROD_TAG }}
+          region: us-central1
+          flags: --port=8080 --memory=2Gi --cpu=2 --min-instances=1 --max-instances=5 --allow-unauthenticated --no-traffic
+          env_vars: |
+            ENVIRONMENT=production
+            LOG_LEVEL=WARNING
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            MAX_RPM_LIMIT=14
+            RATE_LIMIT_WINDOW_SECONDS=60
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Verify Canary Health Check Before Traffic Shift
+        if: steps.deploy.outputs.url != ''
+        run: |
+          PROD_URL="${{ steps.deploy.outputs.url }}"
+          echo "Checking canary health at $PROD_URL/api/system/status"
+          curl -f -m 30 "$PROD_URL/api/system/status" || (echo "Canary Health Check Failed" && exit 1)
+
+      - name: Route 100% Production Traffic
+        if: env.GCP_SA_KEY != ''
+        run: |
+          gcloud run services update-traffic mas-backend-prod --to-latest --region=us-central1
+          echo "100% Production Traffic routed to new revision."
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
