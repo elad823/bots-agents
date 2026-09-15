@@ -16,6 +16,7 @@ except ImportError:
 
 from backend.core.database import DatabaseManager, init_database
 from backend.repositories.agent_repository import AgentRepository
+from backend.repositories.message_repository import MessageRepository
 from backend.repositories.task_repository import TaskRepository
 from backend.services.chat_service import ChatService
 from backend.services.scheduler_service import AutonomousSchedulerService
@@ -32,8 +33,10 @@ async def test_scheduler_manual_trigger() -> None:
         mgr = DatabaseManager(db_path)
         agent_repo = AgentRepository(mgr)
         task_repo = TaskRepository(mgr)
-        chat = ChatService()
+        msg_repo = MessageRepository(mgr)
+        chat = ChatService(msg_repo=msg_repo)
         scheduler = AutonomousSchedulerService(task_repo=task_repo, agent_repo=agent_repo, chat=chat)
+
 
         supervisor = await agent_repo.get_by_slug("supervisor")
         assert supervisor is not None

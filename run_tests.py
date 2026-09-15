@@ -59,6 +59,9 @@ async def run_all() -> None:
     print(" Running MAS Core Infrastructure Tests ")
     print("========================================")
 
+    from backend.core.database import init_database
+    await init_database()
+
     tests = [
         ("Rate Limiter - Immediate Acquire", test_rate_limiter_immediate_acquire),
         ("Rate Limiter - Throttling when Saturated", test_rate_limiter_throttles_when_saturated),
