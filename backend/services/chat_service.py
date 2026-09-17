@@ -44,24 +44,49 @@ class ChatService:
 
         # 3. Retrieve final response text
         response_text = final_state.get("latest_response", "")
-        if not response_text and final_state.get("messages"):
-            # Fallback to last assistant message
-            for m in reversed(final_state["messages"]):
-                if m.get("role") == "assistant":
-                    response_text = m.get("content", "")
-                    break
-
         delegation_chain = final_state.get("delegation_chain", [])
 
-        # 4. Record assistant message in database
-        await self.message_repo.add_message(
-            session_id=active_session,
-            sender_id=target_agent if target_agent != "supervisor" else "supervisor",
-            recipient_id="user",
-            role="assistant",
-            content=response_text,
-            metadata={"delegation_chain": delegation_chain},
-        )
+        # 4. Identify and persist all new assistant/consultation messages generated during this turn
+        all_messages = final_state.get("messages", [])
+        last_user_idx = -1
+        for idx, m in enumerate(all_messages):
+            if m.get("role") == "user" and m.get("content") == prompt:
+                last_user_idx = idx
+
+        new_assistant_messages = [
+            m for m in all_messages[last_user_idx + 1:]
+            if m.get("role") == "assistant"
+        ] if last_user_idx != -1 else [
+            m for m in all_messages if m.get("role") == "assistant"
+        ]
+
+        if new_assistant_messages:
+            for m in new_assistant_messages:
+                sender = m.get("sender_id", "supervisor")
+                recipient = m.get("recipient_id", "user")
+                content = m.get("content", "")
+                if content:
+                    await self.message_repo.add_message(
+                        session_id=active_session,
+                        sender_id=sender,
+                        recipient_id=recipient,
+                        role="assistant",
+                        content=content,
+                        metadata={"delegation_chain": delegation_chain},
+                    )
+            if not response_text:
+                response_text = new_assistant_messages[-1].get("content", "")
+        else:
+            if not response_text:
+                response_text = "Task completed."
+            await self.message_repo.add_message(
+                session_id=active_session,
+                sender_id=target_agent if target_agent != "supervisor" else "supervisor",
+                recipient_id="user",
+                role="assistant",
+                content=response_text,
+                metadata={"delegation_chain": delegation_chain},
+            )
 
         return {
             "response": response_text,

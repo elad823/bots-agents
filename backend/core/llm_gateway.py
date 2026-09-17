@@ -72,7 +72,8 @@ class LLMGateway:
 
     @property
     def api_key(self) -> str:
-        return settings.gemini_api_key
+        settings.refresh_if_changed()
+        return settings.gemini_api_key.strip().strip("'\"")
 
     @property
     def is_mock_mode(self) -> bool:
@@ -99,31 +100,55 @@ class LLMGateway:
                 "parts": [{"text": system_prompt}]
             }
 
+        models_to_try = [model_name]
+        for fb in ["gemini-2.5-flash-lite", "gemini-flash-latest"]:
+            if fb not in models_to_try:
+                models_to_try.append(fb)
+
         def _sync_request() -> str:
             data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=45) as resp:
-                    res = json.loads(resp.read().decode("utf-8"))
-                    candidates = res.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "")
-                    return ""
-            except urllib.error.HTTPError as err:
-                status = err.code
-                body = err.read().decode("utf-8", errors="ignore")
-                if status == 429 or "resourceexhausted" in body.lower() or "quota" in body.lower():
-                    logger.warning("Upstream 429 hit for '%s'. Retrying with backoff...", caller_id)
-                    raise TransientLLMException(f"Upstream rate limit hit (HTTP 429): {body}")
-                logger.error("Direct Gemini REST call failed (%s): %s", status, body)
-                raise RuntimeError(f"Gemini API error (HTTP {status}): {body}") from err
+            last_err = None
+
+            for m in models_to_try:
+                current_url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={self.api_key}"
+                req = urllib.request.Request(
+                    current_url,
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=45) as resp:
+                        res = json.loads(resp.read().decode("utf-8"))
+                        candidates = res.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                return parts[0].get("text", "")
+                        return ""
+                except urllib.error.HTTPError as err:
+                    status = err.code
+                    body = err.read().decode("utf-8", errors="ignore")
+                    last_err = (status, body, err)
+                    body_lower = body.lower()
+                    is_transient = (
+                        status in (429, 503, 500, 502, 504)
+                        or "resourceexhausted" in body_lower
+                        or "quota" in body_lower
+                        or "unavailable" in body_lower
+                        or "high demand" in body_lower
+                        or "temporarily" in body_lower
+                    )
+                    if is_transient:
+                        logger.warning("Model '%s' hit transient issue (HTTP %s) for '%s'. Trying fallback model...", m, status, caller_id)
+                        continue
+                    logger.error("Direct Gemini REST call failed (%s): %s", status, body)
+                    raise RuntimeError(f"Gemini API error (HTTP {status}): {body}") from err
+
+            if last_err:
+                status, body, err = last_err
+                raise TransientLLMException(f"Upstream transient error (HTTP {status}): {body}")
+            return ""
 
         return await asyncio.to_thread(_sync_request)
 
@@ -147,30 +172,14 @@ class LLMGateway:
             logger.info("Caller '%s' paused for %.2fs due to 15 RPM rate limiting.", caller_id, wait_time)
 
         target_model = model_name or self.default_model
-        if "1.5" in target_model:
-            target_model = "gemini-2.5-flash"
+        if "1.5" in target_model or target_model == "gemini-2.5-flash":
+            target_model = self.default_model
 
         # 2. Mock mode handling
         if self.is_mock_mode:
             return self._mock_generate_response(prompt, system_prompt, caller_id)
 
-        # 3. Live Google AI Studio invocation (try SDK first, fallback to REST)
-        if HAS_GENAI:
-            try:
-                genai.configure(api_key=self.api_key)
-                model = genai.GenerativeModel(
-                    model_name=target_model,
-                    system_instruction=system_prompt if system_prompt else None,
-                )
-                response = await asyncio.to_thread(model.generate_content, prompt)
-                return response.text
-            except Exception as exc:
-                err_msg = str(exc).lower()
-                if "429" in err_msg or "resourceexhausted" in err_msg or "quota" in err_msg:
-                    logger.warning("Upstream 429 ResourceExhausted hit for caller '%s'. Retrying with backoff...", caller_id)
-                    raise TransientLLMException(f"Upstream rate limit hit: {exc}") from exc
-                logger.warning("genai SDK failed, attempting direct REST fallback: %s", exc)
-
+        # 3. Direct resilient REST invocation with multi-model fallback
         return await self._call_rest_api(prompt, system_prompt, target_model, caller_id)
 
     def _mock_generate_response(

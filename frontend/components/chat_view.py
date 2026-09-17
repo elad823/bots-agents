@@ -50,10 +50,27 @@ def render_chat_view(target_agent_slug: str) -> None:
         for msg in messages:
             role = msg.get("role", "user")
             sender = msg.get("sender_id", "unknown")
+            recipient = msg.get("recipient_id", "all")
             content = msg.get("content", "")
 
-            with st.chat_message(role):
-                st.markdown(f"**[{sender.capitalize()}]**: {content}")
+            # Inter-agent consultation message (Agent A ➔ Agent B)
+            if recipient not in ("user", "all"):
+                sender_label = sender.replace("_", " ").title()
+                recipient_label = recipient.replace("_", " ").title()
+                with st.chat_message("assistant", avatar="🔄"):
+                    st.markdown(
+                        f"🤖 **[{sender_label}]** &nbsp;➔&nbsp; **[{recipient_label}]**\n\n"
+                        f"{content}"
+                    )
+            elif sender == "user":
+                with st.chat_message("user", avatar="👤"):
+                    st.markdown(f"**[User]**: {content}")
+            else:
+                # Direct response to user
+                avatar = "⚡" if sender == "supervisor" else "💡"
+                sender_label = sender.replace("_", " ").title()
+                with st.chat_message("assistant", avatar=avatar):
+                    st.markdown(f"**[{sender_label}]**: {content}")
 
     # Chat input box
     if user_prompt := st.chat_input("Enter instructions or ask a question to the agent network..."):
