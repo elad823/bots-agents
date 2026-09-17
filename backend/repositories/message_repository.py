@@ -25,13 +25,22 @@ class MessageRepository:
         msg_id = str(uuid.uuid4())
         metadata_json = json.dumps(metadata or {})
 
+        # Ensure content is always a valid string for SQLite binding
+        if not isinstance(content, str):
+            if isinstance(content, (dict, list)):
+                safe_content = json.dumps(content, indent=2)
+            else:
+                safe_content = str(content)
+        else:
+            safe_content = content
+
         sql = """
         INSERT INTO messages (id, session_id, sender_id, recipient_id, role, content, metadata_json)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         await self.db.execute(
             sql,
-            (msg_id, session_id, sender_id, recipient_id, role, content, metadata_json),
+            (msg_id, session_id, sender_id, recipient_id, role, safe_content, metadata_json),
         )
         created = await self.db.fetch_one("SELECT * FROM messages WHERE id = ?", (msg_id,))
         if not created:

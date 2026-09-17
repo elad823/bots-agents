@@ -75,7 +75,8 @@ class ChatService:
                         metadata={"delegation_chain": delegation_chain},
                     )
             if not response_text:
-                response_text = new_assistant_messages[-1].get("content", "")
+                raw_resp = new_assistant_messages[-1].get("content", "")
+                response_text = json.dumps(raw_resp, indent=2) if isinstance(raw_resp, (dict, list)) else str(raw_resp)
         else:
             if not response_text:
                 response_text = "Task completed."
@@ -88,8 +89,10 @@ class ChatService:
                 metadata={"delegation_chain": delegation_chain},
             )
 
+        final_response_str = json.dumps(response_text, indent=2) if isinstance(response_text, (dict, list)) else str(response_text)
+
         return {
-            "response": response_text,
+            "response": final_response_str,
             "session_id": active_session,
             "agent_slug": target_agent,
             "delegation_chain": delegation_chain,

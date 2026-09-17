@@ -229,6 +229,11 @@ async def execute_worker_node(agent_slug: str, state: AgentState) -> AgentState:
 
         # FINISH (or fallback)
         final_answer = decision.get("response") or raw_response
+        if isinstance(final_answer, (dict, list)):
+            final_answer = json.dumps(final_answer, indent=2)
+        elif not isinstance(final_answer, str):
+            final_answer = str(final_answer)
+
         state["messages"].append({
             "role": "assistant",
             "sender_id": agent_slug,

@@ -54,10 +54,12 @@ async def execute_supervisor_node(state: AgentState) -> AgentState:
             latest_worker_msg = final_worker_responses[-1]
             worker_slug = latest_worker_msg.get("sender_id", "specialist")
             delegation_str = " ➔ ".join([c.replace("_", " ").title() for c in state.get("delegation_chain", [])])
+            raw_worker_content = latest_worker_msg.get("content", "")
+            worker_content_str = json.dumps(raw_worker_content, indent=2) if isinstance(raw_worker_content, (dict, list)) else str(raw_worker_content)
             synthesis_prompt = (
                 f"You are the MAS Master Supervisor.\n"
                 f"Specialist Collaboration Trail: {delegation_str}\n"
-                f"Lead Specialist '{worker_slug.replace('_', ' ').title()}' Final Response:\n{latest_worker_msg['content']}\n\n"
+                f"Lead Specialist '{worker_slug.replace('_', ' ').title()}' Final Response:\n{worker_content_str}\n\n"
                 f"Synthesize a clear, polished final response to the user summarizing the collaborative specialist results."
             )
 
