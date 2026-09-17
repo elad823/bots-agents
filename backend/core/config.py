@@ -24,6 +24,33 @@ try:
         def parsed_cors_origins(self) -> list[str]:
             return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+        _last_env_mtime: float = 0.0
+
+        def refresh_if_changed(self) -> None:
+            """Check if .env has been modified on disk and update config fields in memory."""
+            candidates = [Path(".env"), Path(__file__).resolve().parent.parent.parent / ".env"]
+            env_file = next((p for p in candidates if p.is_file()), None)
+            if not env_file:
+                return
+            try:
+                mtime = env_file.stat().st_mtime
+                if mtime > getattr(self, "_last_env_mtime", 0.0):
+                    self._last_env_mtime = mtime
+                    for line in env_file.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            clean_k = k.strip()
+                            clean_v = v.strip().strip("'\"")
+                            if clean_k == "GEMINI_API_KEY":
+                                self.gemini_api_key = clean_v
+                            elif clean_k == "GEMINI_MODEL_DEFAULT":
+                                self.gemini_model_default = clean_v
+                            elif clean_k == "ENVIRONMENT":
+                                self.environment = clean_v
+            except Exception:
+                pass
+
         class Config:
             env_file = ".env"
             env_file_encoding = "utf-8"
@@ -33,11 +60,13 @@ except ImportError:
     class Settings:  # type: ignore
         """Fallback settings class when pydantic_settings is not installed."""
         def __init__(self) -> None:
+            self._last_env_mtime: float = 0.0
             # Parse .env if present
             env_vars: dict[str, str] = {}
             for candidate in [Path(".env"), Path(__file__).resolve().parent.parent.parent / ".env"]:
                 if candidate.is_file():
                     try:
+                        self._last_env_mtime = candidate.stat().st_mtime
                         for line in candidate.read_text(encoding="utf-8").splitlines():
                             line = line.strip()
                             if line and not line.startswith("#") and "=" in line:
@@ -58,6 +87,31 @@ except ImportError:
             self.rate_limit_window_seconds: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", env_vars.get("RATE_LIMIT_WINDOW_SECONDS", "60")))
             self.backend_api_url: str = os.getenv("BACKEND_API_URL", env_vars.get("BACKEND_API_URL", "http://localhost:8000"))
 
+        def refresh_if_changed(self) -> None:
+            """Check if .env has been modified on disk and update config fields in memory."""
+            candidates = [Path(".env"), Path(__file__).resolve().parent.parent.parent / ".env"]
+            env_file = next((p for p in candidates if p.is_file()), None)
+            if not env_file:
+                return
+            try:
+                mtime = env_file.stat().st_mtime
+                if mtime > getattr(self, "_last_env_mtime", 0.0):
+                    self._last_env_mtime = mtime
+                    for line in env_file.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            clean_k = k.strip()
+                            clean_v = v.strip().strip("'\"")
+                            if clean_k == "GEMINI_API_KEY":
+                                self.gemini_api_key = clean_v
+                            elif clean_k == "GEMINI_MODEL_DEFAULT":
+                                self.gemini_model_default = clean_v
+                            elif clean_k == "ENVIRONMENT":
+                                self.environment = clean_v
+            except Exception:
+                pass
+
         @property
         def parsed_cors_origins(self) -> list[str]:
             return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
@@ -65,3 +119,4 @@ except ImportError:
 
 # Singleton instance
 settings = Settings()
+settings.refresh_if_changed()

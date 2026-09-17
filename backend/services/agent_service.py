@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
+from backend.core.config import settings
 from backend.repositories.agent_repository import agent_repository, AgentRepository
+
+logger = logging.getLogger("mas.agent_service")
 
 
 class AgentService:
@@ -28,26 +32,27 @@ class AgentService:
         role: str,
         system_prompt: str,
         slug: str | None = None,
-        model: str = "gemini-1.5-flash",
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Create and register a new specialist agent."""
+        chosen_model = model or settings.gemini_model_default
         if not slug:
             # Generate slug from name: lower, alphanumeric, underscores
             clean_slug = re.sub(r"[^a-zA-Z0-9_]+", "_", name.strip().lower()).strip("_")
             slug = clean_slug[:30]
 
-        # Check for slug conflict and append counter if necessary
+        # If an agent with this slug already exists, reuse it rather than creating duplicates
         existing = await self.repo.get_by_slug(slug)
         if existing:
-            import time
-            slug = f"{slug}_{int(time.time()) % 1000}"
+            logger.info("Agent with slug '%s' already exists. Reusing existing agent.", slug)
+            return existing
 
         return await self.repo.create({
             "name": name,
             "slug": slug,
             "role": role,
             "system_prompt": system_prompt,
-            "model": model,
+            "model": chosen_model,
             "status": "idle",
             "is_system_agent": 0,
         })

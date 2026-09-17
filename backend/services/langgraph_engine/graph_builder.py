@@ -22,7 +22,7 @@ class MultiAgentGraphRunner:
     """Orchestrates multi-agent execution using LangGraph or resilient state machine."""
 
     def __init__(self) -> None:
-        self.max_iterations = 6
+        self.max_iterations = 10
 
     async def run(
         self,
@@ -115,6 +115,11 @@ class MultiAgentGraphRunner:
 
         # 2. Add all registered worker nodes
         all_agents = await agent_repository.get_all()
+
+        def _route_worker(s: AgentState) -> str:
+            nxt = s.get("next", "supervisor")
+            return END if nxt == "FINISH" else nxt
+
         for agent in all_agents:
             slug = agent["slug"]
             if slug != "supervisor":
@@ -122,8 +127,7 @@ class MultiAgentGraphRunner:
                 async def _worker_node(s: AgentState, slug: str = slug) -> AgentState:
                     return await execute_worker_node(slug, s)
                 workflow.add_node(slug, _worker_node)
-                # Edge from worker back to supervisor
-                workflow.add_edge(slug, "supervisor")
+                workflow.add_conditional_edges(slug, _route_worker)
 
         # 3. Conditional routing from supervisor
         def _route_next(s: AgentState) -> str:
@@ -137,7 +141,7 @@ class MultiAgentGraphRunner:
         result = await app.ainvoke(initial_state)
         nxt = result.get("next")
         if nxt and nxt != "FINISH" and (not HAS_LANGGRAPH or nxt != END):
-            # Dynamically spawned agent not in compiled graph; resume via state machine runner
+            # Resiliently resume via state machine runner if more transitions remain
             return await self._run_state_machine(result)
         return result
 

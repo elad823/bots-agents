@@ -10,7 +10,7 @@ class AgentMessage(TypedDict):
     recipient_id: str
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     messages: list[dict[str, Any]]
     next: str  # "FINISH" or worker slug (e.g. "researcher", "secops")
     session_id: str
@@ -19,3 +19,4 @@ class AgentState(TypedDict):
     supervisor_scratchpad: str
     latest_response: str
     error: Optional[str]
+    consultation_stack: list[dict[str, str]]
